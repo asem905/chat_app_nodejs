@@ -8,7 +8,6 @@ const asyncWrapper = require("../../middlewares/async_wrapper");
 const appError = require("../../utils/app_error");
 const { httpStatusText, httpStatusCodes } = require("../../utils/http_status");
 
-
 let ioInstance = null; // Variable to hold the injected Socket.IO instance
 
 const setIo = (io) => {
@@ -27,10 +26,10 @@ const persistAndBroadcastMessage = async (userId, roomId, content) => {
   if (!message) {
     throw new Error("Message persistence failed.");
   }
-  console.log(message); 
 
   if (ioInstance) {
     ioInstance.to(roomId).emit("newMessage", message);
+    console.log(`[Socket Success] Message sent in room ${roomId}:`, message.id);
     return message;
   } else {
     console.warn("Socket.IO instance not initialized. Message not broadcast.");
@@ -54,6 +53,7 @@ const checkIsUserInRoom = async (userId, roomId) => {
 
 const getMessages = asyncWrapper(async (req, res, next) => {
   const roomId = req.params.roomId;
+  const messagesLimit = req.query.limit;
   if (!roomId) {
     const error = appError.createErrorResponse(
       "Room not found",
@@ -64,17 +64,22 @@ const getMessages = asyncWrapper(async (req, res, next) => {
       .status(httpStatusCodes.NOT_FOUND)
       .json({ status: httpStatusText.FAIL, ...error });
   }
-  const messages = await Message.findAll({ where: { room_id: roomId } });
-  if (!messages || messages.length === 0) {
-    const error = appError.createErrorResponse(
-      "Messages not found",
-      httpStatusCodes.NOT_FOUND,
-      httpStatusText.FAIL
-    );
-    return res
-      .status(httpStatusCodes.NOT_FOUND)
-      .json({ status: httpStatusText.FAIL, ...error });
-  }
+  const allMessages = await Message.findAll({
+    where: { room_id: roomId },
+    limit: messagesLimit,
+  });
+
+  const userPromises = allMessages.map((e) =>
+    User.findOne({ where: { id: e.user_id } })
+  );
+  const users = await Promise.all(userPromises);
+
+  const messages = allMessages.map((message, index) => ({
+    ...message.toJSON(), // Include all message fields
+    username: users[index]?.username || "Unknown",
+    is_sent:1
+  }));
+
   return res
     .status(httpStatusCodes.OK)
     .json({ status: httpStatusText.SUCCESS, data: messages });
@@ -103,11 +108,11 @@ const createMessage = asyncWrapper(async (req, res, next) => {
   if (!content) {
     const error = appError.createErrorResponse(
       "Content not found",
-      httpStatusCodes.BAD_REQUEST, 
+      httpStatusCodes.BAD_REQUEST,
       httpStatusText.FAIL
     );
     return next(error);
-  } 
+  }
   try {
     const message = await persistAndBroadcastMessage(userId, roomId, content);
     // Send success response for the HTTP request
@@ -233,7 +238,7 @@ const replyToMessage = asyncWrapper(async (req, res) => {
     );
     return res.status(httpStatusCodes.NOT_FOUND).json({ ...error });
   }
-  return res 
+  return res
     .status(httpStatusCodes.OK)
     .json({ status: httpStatusText.SUCCESS, data: message });
 });
@@ -244,5 +249,5 @@ module.exports = {
   deleteMessage,
   replyToMessage,
   persistAndBroadcastMessage,
-  setIo, 
+  setIo,
 };

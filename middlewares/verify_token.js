@@ -12,7 +12,8 @@ const verifyToken = (req, res, next) => {
     );
     return next(error);
   }
-  const token = authHeader.split(" ")[1].trim().toString();
+  const token = authHeader.split(" ")[1].toString();
+  console.log("==============================+", token);
   jwt.verify(token, process.env.SERVER_SECRET_KEY, (err, user) => {
     if (err) {
       const error = appError.createErrorResponse(
@@ -22,9 +23,10 @@ const verifyToken = (req, res, next) => {
       );
       return next(error);
     }
-
     req.currentUser = user;
+    console.log("from verify:",req.currentUser);
+    return next();
   });
-  return next();
+  
 };
 module.exports = verifyToken;

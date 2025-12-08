@@ -1,9 +1,7 @@
 const http = require('http');
 const { Server } = require('socket.io');
-const app = require('../app'); // Path to your Express application instance
-
-// CRITICAL: We DO NOT require the controller here to avoid the circle.
-// The handler function (persistAndBroadcastMessage) will be set/applied in index.js.
+const app = require('../app');
+const verifyToken = require('../middlewares/verify_token');
 
 // 1. Create the HTTP server using your Express app
 const server = http.createServer(app);
@@ -17,11 +15,27 @@ const io = new Server(server, {
 });
 
 // --- Socket.IO Event Handling placeholder ---
-// We will assign the actual handler function here in index.js
-let sendMessageHandler = (data) => {
+let sendMessageHandler = (socket, data, callback) => {  // ✅ Add callback parameter
     console.log('[Socket] Message received, handler not yet assigned.');
 };
-
+io.use((socket, next) => {
+    // Client sends auth data via the 'auth' object in setAuth({...})
+    const token = socket.handshake.auth.token || socket.handshake.auth.Authorization;
+    console.log(socket);
+    if (token) {
+        // You would typically verify the JWT here.
+        // For debugging, simply log that the token was received.
+        console.log(`[Socket Auth] Received token for client ${socket.id}`);
+        // If authentication passes, proceed with the connection
+        next(); 
+    } else {
+        // Reject connection if token is missing (or validation fails)
+        console.log(`[Socket Auth] Connection rejected: No token provided.`);
+        const error = new Error("Authentication error: Token required.");
+        error.data = { message: "Invalid token or missing credentials" };
+        next(error);
+    }
+});
 io.on('connection', (socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
 
@@ -35,10 +49,9 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 2. LISTEN FOR NEW MESSAGES (Calls the dynamically assigned handler)
-    socket.on('sendMessage', (data) => {
-        // Delegate handling to the function assigned in index.js
-        sendMessageHandler(socket, data);
+    // 2. LISTEN FOR NEW MESSAGES
+    socket.on('sendMessage', (data, callback) => {  // ✅ CHANGED: Add callback
+        sendMessageHandler(socket, data, callback);  // ✅ CHANGED: Pass callback
     });
 
     // 3. DISCONNECT

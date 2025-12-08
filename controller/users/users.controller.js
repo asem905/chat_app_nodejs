@@ -6,6 +6,7 @@ const { validationResult } = require("express-validator");
 const appError = require("../../utils/app_error");
 const { httpStatusText, httpStatusCodes } = require("../../utils/http_status");
 const roomRules = require("../../utils/room_rules");
+const { JsonWebTokenError } = require("jsonwebtoken");
 // Function to safely extract user data for response
 const getUserResponseData = (user) => ({
   id: user.id,
@@ -44,12 +45,10 @@ const registerUser = asyncWrapper(async (req, res, next) => {
 
   const hashedPassword = await bcrypt.hash(password, 10); // Create a new user (ID is generated here)
   if (!hashedPassword) {
-    return res
-      .status(httpStatusCodes.BAD_REQUEST)
-      .json({
-        status: httpStatusText.FAIL,
-        message: "Password hashing failed",
-      });
+    return res.status(httpStatusCodes.BAD_REQUEST).json({
+      status: httpStatusText.FAIL,
+      message: "Password hashing failed",
+    });
   }
   const userData = {
     username: username,
@@ -84,51 +83,51 @@ const registerUser = asyncWrapper(async (req, res, next) => {
 
 // Login user
 const loginUser = asyncWrapper(async (req, res) => {
-  const { email, password } = req.body; // Check if user exists
+  // cleck jwt:
+  req.currentUser = null;
+  const { email, password } = req.body; 
   const user = await User.findOne({ where: { email } });
   if (!user) {
     return res.status(httpStatusCodes.UNAUTHORIZED).json({
       status: httpStatusText.FAIL,
       message: "Please enter valid password and email",
     });
-  } // Check if password is correct
+  } 
   const isPasswordValid = await bcrypt.compare(password, user.password);
   if (!isPasswordValid) {
     return res
       .status(httpStatusCodes.UNAUTHORIZED)
       .json({ status: httpStatusText.FAIL, message: "Invalid password" });
-  } // Generate JWT token
+  } 
+  console.log("token before: ",user.token);
   const token = generateJWT({
     id: user.id,
     email: user.email,
     role: user.role,
-  });
-  // Update user token in DB and save
+  }); 
+  
   user.token = token;
-  await user.save(); // Send response // FIX: Added 'return' for successful response termination
-
+  console.log("token after: ",user.token);
+  await user.save();
   return res.status(httpStatusCodes.OK).json({
     status: httpStatusText.SUCCESS,
     message: "User logged in successfully",
-    data:{
-      user: getUserResponseData(user)
-    }
+    data: {
+      user: getUserResponseData(user), 
+    }, 
   });
 });
+// ...
 
 const getUsers = asyncWrapper(async (_req, res) => {
-  // Exclude sensitive fields like password and token when fetching all users
   const users = await User.findAll({
     attributes: { exclude: ["password", "token"] },
   });
+
   if (!users || users.length === 0) {
-    // Using return next(error) is generally cleaner for NOT_FOUND/ERROR states
-    const error = appError.createErrorResponse(
-      "Users not found",
-      httpStatusCodes.NOT_FOUND,
-      httpStatusText.FAIL
-    );
-    return res.json({ ...error });
+    return res
+      .status(httpStatusCodes.NOT_FOUND)
+      .json({ status: httpStatusText.FAIL, message: "Users not found" });
   }
 
   return res
@@ -136,9 +135,8 @@ const getUsers = asyncWrapper(async (_req, res) => {
     .json({ status: httpStatusText.SUCCESS, data: { users } });
 });
 
-
 module.exports = {
   registerUser,
   loginUser,
-  getUsers
+  getUsers,
 };

@@ -16,10 +16,14 @@ app.use('/api/v1/rooms',roomsRoutes);
 // Additional middleware and route setups can be added here
 
 app.use((err,req,res,next)=>{
-    res.status(err.statusCode || httpStatusCodes.SERVER_ERROR).json({status:httpStatusText.ERROR,message:err.message ||'Internal Server Error'});
+    if (!res.headersSent) {
+       return res.status(err.statusCode || httpStatusCodes.SERVER_ERROR).json({status:httpStatusText.ERROR,message:err.message ||'Internal Server Error'});
+    }
 });
 app.all(/.*/,(req,res)=>{
-    res.status(httpStatusCodes.NOT_FOUND).json({status:httpStatusText.ERROR,message:'Route not found'});
+    if (!res.headersSent) {
+       return res.status(httpStatusCodes.NOT_FOUND).json({status:httpStatusText.ERROR,message:'Route not found'});
+    }
 });
 // Export the singleton instance
 module.exports = app;

@@ -18,6 +18,11 @@ const UserRoom = sequelize.define('UserRoom', {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW,
         allowNull: false
+    },
+    is_approved: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false
     }
 });
 

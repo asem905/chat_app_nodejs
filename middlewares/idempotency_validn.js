@@ -11,7 +11,7 @@ const idempotencyMiddleware = async (req, res, next) => {
     const exists = await Idempotency.findByPk(token);
     
     if (exists) {
-      console.log(`🚫 Duplicate request blocked: ${token}`);
+      console.log(`Duplicate request blocked: ${token}`);
       return res.status(409).json({
         status: 'fail',
         message: 'Duplicate request. Message already sent.',
@@ -19,7 +19,7 @@ const idempotencyMiddleware = async (req, res, next) => {
     }
     
     await Idempotency.create({ token });
-    console.log(`✅ New idempotency token: ${token}`);
+    console.log(`New idempotency token: ${token}`);
     
     next();
     

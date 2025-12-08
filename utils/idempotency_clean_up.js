@@ -17,14 +17,14 @@ const startIdempotencyCleanup = () => {
       });
       
       if (deleted > 0) {
-        console.log(`🧹 Cleaned up ${deleted} idempotency tokens`);
+        console.log(`Cleaned up ${deleted} idempotency tokens`);
       }
     } catch (error) {
-      console.error('❌ Cleanup error:', error);
+      console.error('Cleanup error:', error);
     }
   });
   
-  console.log('🕐 Idempotency cleanup started (runs every hour)');
+  console.log('Idempotency cleanup started (runs every hour)');
 };
 
 module.exports = startIdempotencyCleanup;

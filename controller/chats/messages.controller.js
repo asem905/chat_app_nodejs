@@ -36,7 +36,22 @@ const persistAndBroadcastMessage = async (userId, roomId, content) => {
     return message;
   }
 };
-
+const updateMessageAndBroadcast = async (messageId, content) => {
+  var message = await Message.findOne({ where: { id: messageId } });
+  if (!message) {
+    throw new Error("Message not found.");
+  }
+  message.content = content;
+  await message.save();
+  if (ioInstance) {
+    ioInstance.to(message.room_id).emit("messageUpdated", message);
+    console.log(
+      `[Socket Success] Message updated in room ${message.room_id}:`,
+      message.id
+    );
+  }
+  return message;
+}
 const checkIsUserInRoom = async (userId, roomId) => {
   const isUserInRoom = await UserRoom.findOne({
     where: { user_id: userId, room_id: roomId },
@@ -243,6 +258,57 @@ const replyToMessage = asyncWrapper(async (req, res) => {
     .json({ status: httpStatusText.SUCCESS, data: message });
 });
 
+const updateMessage=asyncWrapper(async (req, res) => {
+  const messageId = req.params.messageId;
+  if (!messageId) {
+    const error = appError.createErrorResponse(
+      "Message not found",
+      httpStatusCodes.NOT_FOUND,
+      httpStatusText.FAIL
+    );
+    return res.status(httpStatusCodes.NOT_FOUND).json({ ...error });
+  }
+  const userId = req.currentUser.id;
+  if (!userId) {
+    const error = appError.createErrorResponse(
+      "User not found",
+      httpStatusCodes.NOT_FOUND,
+      httpStatusText.FAIL
+    );
+    return res.status(httpStatusCodes.NOT_FOUND).json({ ...error });
+  }
+  var message = await Message.findOne({ where: { id: messageId } });
+  if (!message) {
+    const error = appError.createErrorResponse(
+      "Message not found",
+      httpStatusCodes.NOT_FOUND,
+      httpStatusText.FAIL
+    );
+    return res.status(httpStatusCodes.NOT_FOUND).json({ ...error });
+  }
+  if (message.user_id !== userId) {
+    const error = appError.createErrorResponse(
+      "You are not authorized to update this message",
+      httpStatusCodes.UNAUTHORIZED,
+      httpStatusText.FAIL
+    );
+    return res.status(httpStatusCodes.UNAUTHORIZED).json({ ...error });
+  }
+  var content = req.body.content;
+  if (!content) {
+    const error = appError.createErrorResponse(
+      "Content is required",
+      httpStatusCodes.BAD_REQUEST,
+      httpStatusText.FAIL
+    );
+    return res.status(httpStatusCodes.BAD_REQUEST).json({ ...error });
+  }
+  message=await updateMessageAndBroadcast(messageId, content);
+  await message.save();
+  return res
+    .status(httpStatusCodes.OK)
+    .json({ status: httpStatusText.SUCCESS, data: message });
+})
 module.exports = {
   getMessages,
   createMessage,
@@ -250,4 +316,5 @@ module.exports = {
   replyToMessage,
   persistAndBroadcastMessage,
   setIo,
+  updateMessage
 };

@@ -26,5 +26,5 @@ router.get('/:roomId/messages', verifyToken, messagesController.getMessages);
 router.post('/:roomId/messages', verifyToken, idempotencyMiddleware, messagesController.createMessage);
 router.delete('/:roomId/messages/:messageId', verifyToken, messagesController.deleteMessage);
 router.post('/:roomId/messages/:messageId/reply', verifyToken, messagesController.replyToMessage);
-
+router.put('/:roomId/messages/:messageId', verifyToken, messagesController.updateMessage);
 module.exports = router;

@@ -7,7 +7,7 @@ const chatsController = require('../../controller/chats/rooms.controller');
 const messagesController = require('../../controller/chats/messages.controller');
 const { body } = require('express-validator');
 const isAllowedTo = require('../../middlewares/is_allowed');
-const idempotencyMiddleware=require('../../middlewares/idempotency_validn');
+const idempotencyMiddleware = require('../../middlewares/idempotency_validn');
 // Room routes
 router.get('/all-rooms', verifyToken, chatsController.getAllRooms);
 router.get('/', verifyToken, chatsController.getRoomsForUser);
@@ -25,6 +25,5 @@ router.get("/:roomId/non-approved-users", verifyToken, chatsController.nonApprov
 router.get('/:roomId/messages', verifyToken, messagesController.getMessages);
 router.post('/:roomId/messages', verifyToken, idempotencyMiddleware, messagesController.createMessage);
 router.delete('/:roomId/messages/:messageId', verifyToken, messagesController.deleteMessage);
-router.post('/:roomId/messages/:messageId/reply', verifyToken, messagesController.replyToMessage);
 router.put('/:roomId/messages/:messageId', verifyToken, messagesController.updateMessage);
 module.exports = router;

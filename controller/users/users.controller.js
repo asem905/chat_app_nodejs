@@ -18,7 +18,7 @@ const getUserResponseData = (user) => ({
   token: user.token,
 });
 
-// Register a new user
+// Register a new user 
 const registerUser = asyncWrapper(async (req, res, next) => {
   // Validate request body (UNCOMMENTED AND CORRECTED)
   const errors = validationResult(req);
@@ -85,36 +85,36 @@ const registerUser = asyncWrapper(async (req, res, next) => {
 const loginUser = asyncWrapper(async (req, res) => {
   // cleck jwt:
   req.currentUser = null;
-  const { email, password } = req.body; 
+  const { email, password } = req.body;
   const user = await User.findOne({ where: { email } });
   if (!user) {
     return res.status(httpStatusCodes.UNAUTHORIZED).json({
       status: httpStatusText.FAIL,
       message: "Please enter valid password and email",
     });
-  } 
+  }
   const isPasswordValid = await bcrypt.compare(password, user.password);
   if (!isPasswordValid) {
     return res
       .status(httpStatusCodes.UNAUTHORIZED)
       .json({ status: httpStatusText.FAIL, message: "Invalid password" });
-  } 
-  console.log("token before: ",user.token);
+  }
+  console.log("token before: ", user.token);
   const token = generateJWT({
     id: user.id,
     email: user.email,
     role: user.role,
-  }); 
-  
+  });
+
   user.token = token;
-  console.log("token after: ",user.token);
+  console.log("token after: ", user.token);
   await user.save();
   return res.status(httpStatusCodes.OK).json({
     status: httpStatusText.SUCCESS,
     message: "User logged in successfully",
     data: {
-      user: getUserResponseData(user), 
-    }, 
+      user: getUserResponseData(user),
+    },
   });
 });
 // ...

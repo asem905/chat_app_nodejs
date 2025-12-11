@@ -4,7 +4,7 @@ const Room = require('../chats/rooms.model');
 const UserRoom = require('../user/user_room.model'); // Import the new junction model
 
 
-User.belongsToMany(Room,{
+User.belongsToMany(Room, {
     through: UserRoom,
     foreignKey: 'user_id', // The key added to the UserRoom table that references the User ID
     as: 'Rooms'          // Alias to access the relationship: user.getRooms()
@@ -14,6 +14,8 @@ Room.belongsToMany(User, {
     foreignKey: 'room_id', // The key added to the UserRoom table that references the Room ID
     as: 'Members'        // Alias to access the relationship: room.getMembers()
 });
+UserRoom.belongsTo(User, { foreignKey: 'user_id' });
+UserRoom.belongsTo(Room, { foreignKey: 'room_id' });
 
 module.exports = {
     User,

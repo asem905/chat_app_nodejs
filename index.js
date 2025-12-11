@@ -24,13 +24,13 @@ setSendMessageHandler(async (socket, messageData, callback) => { // FIX: Added c
 
   // Validation
   if (!roomId || !content || !senderId) {
-    const errorResponse = { 
-      type: "validation", 
-      message: "Missing required fields: roomId, content, or senderId" 
+    const errorResponse = {
+      type: "validation",
+      message: "Missing required fields: roomId, content, or senderId"
     };
-    
+
     socket.emit("error", errorResponse);
-    
+
     // FIX: Send error via callback too
     if (callback) {
       callback({ status: 'error', ...errorResponse });
@@ -50,9 +50,9 @@ setSendMessageHandler(async (socket, messageData, callback) => { // FIX: Added c
 
     // FIX: Send success acknowledgment
     if (callback) {
-      callback({ 
-        status: 'success', 
-        data: message 
+      callback({
+        status: 'success',
+        data: message
       });
     }
 
@@ -61,14 +61,14 @@ setSendMessageHandler(async (socket, messageData, callback) => { // FIX: Added c
       `[Socket Error] Failed to process message for room ${roomId}:`,
       error.message
     );
-    
+
     const errorResponse = {
       type: error.statusCode === 404 ? "not_found" : "persistence",
       message: error.message || "Failed to send message.",
     };
 
     socket.emit("error", errorResponse);
-    
+
     // FIX: Send error via callback
     if (callback) {
       callback({ status: 'error', ...errorResponse });

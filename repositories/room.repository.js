@@ -31,7 +31,15 @@ class RoomRepository {
             where: { id: roomIds },
         });
     }
-
+    async getRoomsEvenNotApproved(userId) {
+        const userRooms = await UserRoom.findAll({
+            where: { user_id: userId },
+        });
+        const roomIds = userRooms.map((userRoom) => userRoom.room_id);
+        return await Room.findAll({
+            where: { id: roomIds },
+        });
+    }
     async findRoomById(roomId) {
         return await Room.findOne({
             where: { id: roomId },

@@ -22,9 +22,8 @@ const getMessages = asyncWrapper(async (req, res, next) => {
 
     validateRoomId(roomId);
     validateUserId(userId);
-    console.log(userId, roomId, limit, offset);
     const result = await messageService.getMessages(userId, roomId, limit, offset);
-    console.log("successfully fetched messages :", result);
+    console.log("successfully fetched messages ",);
     return ResponseFormatter.paginated(
         res,
         httpStatusCodes.OK,
@@ -79,6 +78,23 @@ const deleteMessage = asyncWrapper(async (req, res, next) => {
     return ResponseFormatter.deleted(res, "Message deleted successfully");
 });
 
+/**
+ * Persist and broadcast message via Socket.IO
+ * This is called from the socket event handler in index.js
+ */
+const persistAndBroadcastMessage = async (userId, roomId, content, parentMessageId = null) => {
+    validateRoomId(roomId);
+    validateUserId(userId);
+
+    const message = await messageService.createMessage(
+        userId,
+        roomId,
+        content,
+        parentMessageId
+    );
+
+    return message;
+};
 
 module.exports = {
     getMessages,
@@ -86,4 +102,5 @@ module.exports = {
     updateMessage,
     deleteMessage,
     setIo,
+    persistAndBroadcastMessage,
 };

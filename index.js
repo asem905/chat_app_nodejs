@@ -2,7 +2,6 @@ require("dotenv").config();
 const port = process.env.PORT;
 const { sequelize } = require("./configs/db.config");
 const startIdempotencyCleanup = require("./utils/idempotency_clean_up");
-// CRITICAL: Import all models so Sequelize knows which tables to sync
 const { User, Room, UserRoom } = require("./models/relations/users_rooms_link");
 const Message = require("./models/chats/messages.model"); // FIX: Remove destructuring
 
@@ -14,9 +13,11 @@ const {
 } = require("./configs/socket.config");
 
 const messageController = require("./controller/chats/messages.controller");
+const socketService = require("./services/socket.service");
 
-// A. Inject the IO instance into the controller
+// A. Inject the IO instance into the controller and socket service
 messageController.setIo(io);
+socketService.setIo(io);
 
 // B. Assign the persistence function to the Socket.IO 'sendMessage' event
 setSendMessageHandler(async (socket, messageData, callback) => { // FIX: Added callback parameter
@@ -83,6 +84,13 @@ async function startServer() {
 
     await sequelize.sync({ alter: false });
     console.log("✅ Database synchronized.");
+
+    // Initialize Bloom Filter with existing users
+    const userRepository = require("./repositories/user.repository");
+    const bloomFilterService = require("./services/bloom_filter.service");
+
+    const { emails, usernames } = await userRepository.getAllEmailsAndUsernames();
+    await bloomFilterService.initialize(emails, usernames);
 
     startIdempotencyCleanup();
     // Start the server

@@ -1,29 +1,23 @@
-const { User, UserRoom } = require("../../models/relations/users_rooms_link");
-const bcrypt = require("bcrypt");
-const generateJWT = require("../../utils/genJWT");
+const userService = require("../../services/user.service");
 const asyncWrapper = require("../../middlewares/async_wrapper");
+const ResponseFormatter = require("../../utils/response.formatter");
+const { httpStatusCodes } = require("../../utils/http_status");
 const { validationResult } = require("express-validator");
 const appError = require("../../utils/app_error");
-const { httpStatusText, httpStatusCodes } = require("../../utils/http_status");
-const roomRules = require("../../utils/room_rules");
-const { JsonWebTokenError } = require("jsonwebtoken");
-// Function to safely extract user data for response
-const getUserResponseData = (user) => ({
-  id: user.id,
-  username: user.username,
-  email: user.email,
-  avatar: user.avatar,
-  status: user.status,
-  role: user.role,
-  token: user.token,
-});
+const { httpStatusText } = require("../../utils/http_status");
 
-// Register a new user 
+/**
+ * User Controller - HTTP Request Handler Layer
+ * Handles HTTP requests and delegates business logic to user service
+ */
+
+/**
+ * Register a new user
+ */
 const registerUser = asyncWrapper(async (req, res, next) => {
-  // Validate request body (UNCOMMENTED AND CORRECTED)
+  // Validate request body using express-validator
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    // Using the global error handler via next() for validation failure
     const validationError = appError.createErrorResponse(
       "Validation Error",
       httpStatusCodes.BAD_REQUEST,
@@ -31,112 +25,120 @@ const registerUser = asyncWrapper(async (req, res, next) => {
       errors.array()
     );
     return next(validationError);
-  } // Multer uses req.file.filename, not req.file.fileName
-  const avatar = req.file ? req.file.filename : "";
-
-  const { username, email, password, role } = req.body; // Check if user already exists
-  const existingUser = await User.findOne({ where: { email } });
-  if (existingUser) {
-    // FIX: Use 'return' and proper status codes/structure
-    return res
-      .status(httpStatusCodes.BAD_REQUEST)
-      .json({ status: httpStatusText.FAIL, message: "User already exists" });
-  } // Hash the password
-
-  const hashedPassword = await bcrypt.hash(password, 10); // Create a new user (ID is generated here)
-  if (!hashedPassword) {
-    return res.status(httpStatusCodes.BAD_REQUEST).json({
-      status: httpStatusText.FAIL,
-      message: "Password hashing failed",
-    });
   }
+
+  // Extract avatar filename from multer
+  const avatarFilename = req.file ? req.file.filename : null;
+
+  // Extract user data from request body
   const userData = {
-    username: username,
-    email: email,
-    password: hashedPassword,
-    role: role,
-    token: null,
+    username: req.body.username,
+    email: req.body.email,
+    password: req.body.password,
+    role: req.body.role
   };
-  if (avatar) {
-    userData.avatar = avatar;
-  }
-  const user = await User.create({
-    ...userData,
-  }); // Generate JWT token using the new user's ID
 
-  const token = generateJWT({
-    id: user.id,
-    email: user.email,
-    role: user.role,
-  }); // Update the user record with the generated token
+  // Delegate to service layer
+  const user = await userService.registerUser(userData, avatarFilename);
 
-  user.token = token;
-  await user.save(); // Send response // FIX: Added 'return' for successful response termination
+  // Get safe user data
+  const safeUserData = userService.getSafeUserData(user);
 
-  return res.status(httpStatusCodes.CREATED).json({
-    status: httpStatusText.SUCCESS,
-    data: {
-      user: getUserResponseData(user),
-    },
-  });
+  // Return response
+  return ResponseFormatter.created(
+    res,
+    { user: safeUserData },
+    "User registered successfully"
+  );
 });
 
-// Login user
-const loginUser = asyncWrapper(async (req, res) => {
-  // cleck jwt:
-  req.currentUser = null;
-  const { email, password } = req.body;
-  const user = await User.findOne({ where: { email } });
-  if (!user) {
-    return res.status(httpStatusCodes.UNAUTHORIZED).json({
-      status: httpStatusText.FAIL,
-      message: "Please enter valid password and email",
-    });
-  }
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-  if (!isPasswordValid) {
-    return res
-      .status(httpStatusCodes.UNAUTHORIZED)
-      .json({ status: httpStatusText.FAIL, message: "Invalid password" });
-  }
-  console.log("token before: ", user.token);
-  const token = generateJWT({
-    id: user.id,
-    email: user.email,
-    role: user.role,
-  });
+/**
+ * Login user
+ */
+const loginUser = asyncWrapper(async (req, res, next) => {
+  const loginData = {
+    email: req.body.email,
+    password: req.body.password
+  };
 
-  user.token = token;
-  console.log("token after: ", user.token);
-  await user.save();
-  return res.status(httpStatusCodes.OK).json({
-    status: httpStatusText.SUCCESS,
-    message: "User logged in successfully",
-    data: {
-      user: getUserResponseData(user),
-    },
-  });
+  // Delegate to service layer
+  const user = await userService.loginUser(loginData);
+
+  // Get safe user data
+  const safeUserData = userService.getSafeUserData(user);
+
+  // Return response
+  return ResponseFormatter.success(
+    res,
+    httpStatusCodes.OK,
+    { user: safeUserData },
+    "User logged in successfully"
+  );
 });
-// ...
 
-const getUsers = asyncWrapper(async (_req, res) => {
-  const users = await User.findAll({
-    attributes: { exclude: ["password", "token"] },
-  });
+/**
+ * Get all users
+ */
+const getUsers = asyncWrapper(async (req, res, next) => {
+  // Delegate to service layer
+  const users = await userService.getAllUsers();
 
-  if (!users || users.length === 0) {
-    return res
-      .status(httpStatusCodes.NOT_FOUND)
-      .json({ status: httpStatusText.FAIL, message: "Users not found" });
-  }
+  // Return response
+  return ResponseFormatter.success(
+    res,
+    httpStatusCodes.OK,
+    { users },
+    "Users retrieved successfully"
+  );
+});
 
-  return res
-    .status(httpStatusCodes.OK)
-    .json({ status: httpStatusText.SUCCESS, data: { users } });
+/**
+ * Get user by ID
+ */
+const getUserById = asyncWrapper(async (req, res, next) => {
+  const userId = req.params.userId;
+
+  // Delegate to service layer
+  const user = await userService.getUserById(userId);
+
+  // Get safe user data (exclude password)
+  const safeUserData = userService.getSafeUserData(user);
+
+  // Return response
+  return ResponseFormatter.success(
+    res,
+    httpStatusCodes.OK,
+    { user: safeUserData },
+    "User retrieved successfully"
+  );
+});
+
+/**
+ * Update user profile
+ */
+const updateUserProfile = asyncWrapper(async (req, res, next) => {
+  const userId = req.currentUser.id; // From auth middleware
+  const updateData = req.body;
+
+  // Delegate to service layer
+  const updatedUser = await userService.updateUserProfile(userId, updateData);
+
+  // Get safe user data
+  const safeUserData = userService.getSafeUserData(updatedUser);
+
+  // Return response
+  return ResponseFormatter.updated(
+    res,
+    { user: safeUserData },
+    "User profile updated successfully"
+  );
 });
 
 module.exports = {
   registerUser,
   loginUser,
   getUsers,
+  getUserById,
+  updateUserProfile
 };
+

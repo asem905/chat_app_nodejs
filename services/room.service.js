@@ -82,14 +82,11 @@ class RoomService {
     }
     async getAllRooms(userId) {
         const joinedRoomIds = await roomRepository.getRoomsEvenNotApproved(userId);
-        console.log("joinedRoomIds", joinedRoomIds);
         const joinedIds = joinedRoomIds.map((userRoom) => {
             console.log("userRoom", userRoom.id);
             return userRoom.id;
         });
-        console.log("joinedIds", joinedIds);
         const rooms = await roomRepository.getAllAvailableRooms(userId, joinedIds);
-        console.log("rooms", rooms.map((room) => room.room_name));
         const usersRooms = [];
         for (const room of rooms) {
             const users = await room.getMembers();

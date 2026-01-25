@@ -76,11 +76,9 @@ class MessageRepository {
 
 
     async isUserInRoom(userId, roomId) {
-        console.log(userId, roomId);
         const userRoom = await UserRoom.findOne({
             where: { user_id: userId, room_id: roomId }
         });
-        console.log(userRoom);
         return userRoom;
     }
 

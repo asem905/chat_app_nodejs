@@ -92,7 +92,6 @@ const getRoomsForUser = asyncWrapper(async (req, res, next) => {
   validateUserId(userId);
 
   const rooms = await roomService.getRoomsForUser(userId);
-  console.log(rooms.map((room) => room.room_name));
   validateRoomExists(rooms);
 
   return ResponseFormatter.success(res, httpStatusCodes.OK, {

@@ -110,10 +110,9 @@ class UserService {
 
         let existingUser = null;
         if (mightExist) {
-            // Bloom Filter says "maybe exists" -> confirm with DB
+            console.log("User might exist");
             existingUser = await userRepository.findUserByEmail(validatedData.email);
         }
-        // else: Bloom Filter says "definitely doesn't exist" -> skip DB query!
 
         if (existingUser) {
             throw appError.createErrorResponse(
@@ -164,9 +163,10 @@ class UserService {
         await userRepository.updateUserToken(user.id, token);
         user.token = token;
 
-        // OPTIMIZATION: Add email and username to Bloom Filter (hash and set bits)
+        // OPTIMIZATION: Add email to Bloom Filter (hash email → set bits)
+        // This hashes the email to get bit positions and sets those bits to 1
+        // The actual email string is NOT stored in the filter
         bloomFilterService.addEmail(user.email);
-        bloomFilterService.addUsername(user.username);
 
         return user;
     }
@@ -178,6 +178,21 @@ class UserService {
         // Validate login data
         const validatedData = validateUserLogin(loginData);
 
+        // OPTIMIZATION: Check Bloom Filter first (hashes email, checks bits)
+        // If filter says "definitely not exists" -> skip DB query entirely
+        const mightExist = bloomFilterService.mightExistEmail(validatedData.email);
+        let existingUser = null;
+        if (!mightExist) {
+            console.log("User might not exist in bloom filter");
+            throw appError.createErrorResponse(
+                "Invalid email or password",
+                httpStatusCodes.UNAUTHORIZED,
+                httpStatusText.FAIL
+            );
+        }
+        console.log("=======================");
+        console.log("User might exist");
+        console.log("=======================");
         // Find user by email
         const user = await userRepository.findUserByEmail(validatedData.email);
         if (!user) {

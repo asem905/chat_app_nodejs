@@ -57,21 +57,42 @@ class SocketService {
     }
 
 
-    broadcastTyping(roomId, userData) {
+    broadcastTyping(roomId, userData, socketId) {
         if (!this.isInitialized()) {
             return;
         }
-
-        this.io.to(roomId.toString()).emit('userTyping', userData);
+        console.log("broadcasting typing to room", roomId);
+        // Broadcast to all users in the room EXCEPT the sender
+        if (socketId) {
+            const socket = this.io.sockets.sockets.get(socketId);
+            if (socket) {
+                console.log("broadcasting typing to room", roomId);
+                socket.to(roomId.toString()).emit('userTyping', userData);
+            }
+        } else {
+            // Fallback: broadcast to everyone if socketId not provided
+            this.io.to(roomId.toString()).emit('userTyping', userData);
+        }
     }
 
 
-    broadcastStopTyping(roomId, userData) {
+    broadcastStopTyping(roomId, userData, socketId) {
         if (!this.isInitialized()) {
             return;
         }
-
-        this.io.to(roomId.toString()).emit('userStoppedTyping', userData);
+        console.log("trying to broadcast stop typing to room", roomId);
+        // Broadcast to all users in the room EXCEPT the sender
+        if (socketId) {
+            const socket = this.io.sockets.sockets.get(socketId);
+            if (socket) {
+                console.log("broadcasting stop typing to room", roomId);
+                socket.to(roomId.toString()).emit('userStoppedTyping', userData);
+            }
+        } else {
+            // Fallback: broadcast to everyone if socketId not provided
+            console.log("broadcasting stop typing to room", roomId);
+            this.io.to(roomId.toString()).emit('userStoppedTyping', userData);
+        }
     }
 }
 

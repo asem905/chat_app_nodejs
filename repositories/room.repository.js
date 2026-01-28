@@ -102,6 +102,30 @@ class RoomRepository {
             where: { id: roomIds },
         });
     }
+
+    /**
+     * Get user-room approval status
+     * Used for Socket.IO access control
+     */
+    async getUserRoomApprovalStatus(userId, roomId) {
+        return await UserRoom.findOne({
+            where: { user_id: userId, room_id: roomId },
+        });
+    }
+
+    /**
+     * Find all rooms for a user (including unapproved)
+     * Used for Socket.IO access control
+     */
+    async findRoomsByUserId(userId) {
+        return await UserRoom.findAll({
+            where: { user_id: userId },
+            include: [{
+                model: Room,
+                as: 'Room',
+            }],
+        });
+    }
 }
 
 module.exports = new RoomRepository();

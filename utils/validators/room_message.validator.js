@@ -179,6 +179,102 @@ const validateUserInRoom = (usersInRoom, userId) => {
     }
 };
 
+const { body, param } = require('express-validator');
+const validator = require('validator');
+
+/**
+ * Express-validator rules for message operations
+ * Enhanced validation with XSS and injection protection
+ */
+
+/**
+ * Validation rules for message creation
+ */
+const createMessageRules = () => {
+    return [
+        body('content')
+            .trim()
+            .notEmpty()
+            .withMessage('Message content is required')
+            .isLength({ min: 1, max: parseInt(process.env.MAX_MESSAGE_LENGTH) || 5000 })
+            .withMessage(`Message content must be between 1 and ${process.env.MAX_MESSAGE_LENGTH || 5000} characters`)
+            .custom((value) => {
+                // Check for suspicious patterns
+                const suspiciousPatterns = [
+                    /<script/i,
+                    /javascript:/i,
+                    /on\w+\s*=/i, // inline event handlers
+                ];
+
+                if (suspiciousPatterns.some(pattern => pattern.test(value))) {
+                    throw new Error('Message contains invalid content');
+                }
+                return true;
+            }),
+
+        body('parent_message_id')
+            .optional()
+            .isInt({ min: 1 })
+            .withMessage('Invalid parent message ID'),
+    ];
+};
+
+/**
+ * Validation rules for message update
+ */
+const updateMessageRules = () => {
+    return [
+        param('messageId')
+            .isInt({ min: 1 })
+            .withMessage('Invalid message ID'),
+
+        body('content')
+            .trim()
+            .notEmpty()
+            .withMessage('Message content is required')
+            .isLength({ min: 1, max: parseInt(process.env.MAX_MESSAGE_LENGTH) || 5000 })
+            .withMessage(`Message content must be between 1 and ${process.env.MAX_MESSAGE_LENGTH || 5000} characters`)
+            .custom((value) => {
+                const suspiciousPatterns = [
+                    /<script/i,
+                    /javascript:/i,
+                    /on\w+\s*=/i,
+                ];
+
+                if (suspiciousPatterns.some(pattern => pattern.test(value))) {
+                    throw new Error('Message contains invalid content');
+                }
+                return true;
+            }),
+    ];
+};
+
+/**
+ * Validation rules for message deletion
+ */
+const deleteMessageRules = () => {
+    return [
+        param('messageId')
+            .isInt({ min: 1 })
+            .withMessage('Invalid message ID'),
+
+        param('roomId')
+            .isInt({ min: 1 })
+            .withMessage('Invalid room ID'),
+    ];
+};
+
+/**
+ * Validation rules for getting messages
+ */
+const getMessagesRules = () => {
+    return [
+        param('roomId')
+            .isInt({ min: 1 })
+            .withMessage('Invalid room ID'),
+    ];
+};
+
 module.exports = {
     validateRoomId,
     validateUserId,
@@ -189,5 +285,10 @@ module.exports = {
     validateUserAuthorization,
     validateRoomData,
     validateRoomExists,
-    validateUserInRoom
+    validateUserInRoom,
+    // Enhanced express-validator rules
+    createMessageRules,
+    updateMessageRules,
+    deleteMessageRules,
+    getMessagesRules,
 };

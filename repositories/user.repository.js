@@ -121,18 +121,15 @@ class UserRepository {
     }
 
     /**
-     * Get all emails and usernames for Bloom Filter initialization
-     * Returns only the necessary data (not full user objects)
+     * Get all emails for Bloom Filter initialization
+     * Returns only emails (not usernames, not full user objects)
      */
-    async getAllEmailsAndUsernames() {
+    async getAllEmails() {
         const users = await User.findAll({
-            attributes: ['email', 'username']
+            attributes: ['email']
         });
 
-        return {
-            emails: users.map(user => user.email).filter(email => email),
-            usernames: users.map(user => user.username).filter(username => username)
-        };
+        return users.map(user => user.email).filter(email => email);
     }
 }
 

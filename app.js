@@ -1,13 +1,32 @@
 // app.js
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const { httpStatusCodes, httpStatusText } = require('./utils/http_status');
+const { detectSQLInjection } = require('./middlewares/sanitization');
+const { globalLimiter, speedLimiter } = require('./middlewares/rate_limiter');
 const app = new express();
 const usersRoutes = require('./routes/auth/users.routes');
 const roomsRoutes = require('./routes/chat/rooms.routes');
-// Middleware example
+const dotenv = require('dotenv');
+dotenv.config();
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS.split(',');
+// Security Middleware (applied first)
+app.use(helmet());
+app.use(cors({
+    origin: ALLOWED_ORIGINS,
+    credentials: true,
+}));
+
+// Body parsing middleware
 app.use(express.json());
-app.use(cors());
+
+// Sanitization middleware (after body parsing, before routes)
+app.use(detectSQLInjection); // Detect SQL injection patterns
+
+// Rate limiting middleware
+app.use(globalLimiter); // Global rate limiter
+app.use(speedLimiter); // Speed limiter (slows down excessive requests)
 // RouteS
 const path = require("path");
 app.use('/api/v1/uploads', express.static(path.join(__dirname, './uploads')));

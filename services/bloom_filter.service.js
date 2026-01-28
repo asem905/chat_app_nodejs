@@ -1,14 +1,24 @@
 const { BloomFilter } = require('bloom-filters');
 
 /**
- * Bloom Filter Service - Probabilistic Data Structure for Username/Email Existence Checks
+ * Bloom Filter Service - Email Existence Check (Minimal Storage)
  * 
- * This service uses a bit-array (not storing actual strings) to check if a username/email
- * MIGHT exist in the system. It hashes the input and sets specific bits in memory.
+ * HOW IT WORKS:
+ * 1. Each email is run through multiple hash functions (e.g., 3-7 hash functions)
+ * 2. Each hash function produces a number that identifies a specific BIT position
+ * 3. Those bits are SET to 1 in a bit-array
+ * 4. The email itself is NOT stored - only the bits are set
  * 
- * Storage: ~1-2 bits per item (extremely efficient)
- * False Positive Rate: ~1% (configurable)
- * False Negative Rate: 0% (if it says "NO", it's definitely not there)
+ * EXAMPLE:
+ * - Email "user@example.com" → Hash1(email)=42, Hash2(email)=157, Hash3(email)=891
+ * - Bits 42, 157, and 891 in the bit-array are set to 1
+ * - Total storage: ~10 bits per email (not the full string!)
+ * 
+ * CHECKING:
+ * - To check if "user@example.com" exists:
+ * - Compute Hash1(email)=42, Hash2(email)=157, Hash3(email)=891
+ * - Check if bits 42, 157, 891 are ALL set to 1
+ * - If yes → "might exist", If no → "definitely doesn't exist"
  */
 class BloomFilterService {
     constructor() {
@@ -18,51 +28,39 @@ class BloomFilterService {
     }
 
     /**
-     * Initialize the Bloom Filter with existing usernames and emails from database
+     * Initialize the Bloom Filter with existing emails from database
      * 
-     * @param {Array<string>} emails - Array of existing emails
-     * @param {Array<string>} usernames - Array of existing usernames
+     * @param {Array<string>} emails - Array of existing emails to hash
      */
-    async initialize(emails = [], usernames = []) {
+    async initialize(emails = []) {
         try {
-            // Calculate total items
-            this.itemCount = emails.length + usernames.length;
+            this.itemCount = emails.length || 1000; // Default 1000 for empty DB
 
-            if (this.itemCount === 0) {
-                // Start with a small filter for empty database
-                this.itemCount = 1000; // Expected growth
-            }
 
-            // Create Bloom Filter optimized for minimal storage
-            // errorRate: 0.01 means 1% false positive rate
-            // This gives us ~9.6 bits per item (minimum storage)
-            this.filter = new BloomFilter(this.itemCount, 0.01);
+            const errorRate = 0.01; // 1% false positive
+            const bitsPerItem = Math.ceil((this.itemCount * Math.abs(Math.log(errorRate))) / Math.pow(Math.log(2), 2));
+            const hashFunctions = Math.ceil((bitsPerItem / this.itemCount) * Math.log(2));//what this hash func actually does is it takes the email and hashes it multiple times and returns the index of the bit to be set to 1
 
-            // Add all existing emails with prefix (hash each email, set bits)
+            this.filter = new BloomFilter(bitsPerItem, hashFunctions);
+
             emails.forEach(email => {
                 if (email) {
-                    this.filter.add(`email:${email.toLowerCase()}`);
-                }
-            });
-
-            // Add all existing usernames with prefix (hash each username, set bits)
-            usernames.forEach(username => {
-                if (username) {
-                    this.filter.add(`username:${username.toLowerCase()}`);
+                    this.filter.add(email.toLowerCase());
                 }
             });
 
             this.initialized = true;
 
-            // Log initialization stats
-            console.log('✅ Bloom Filter initialized:');
-            console.log(`   - Items loaded: ${emails.length + usernames.length}`);
+            console.log('✅ Bloom Filter initialized (Email-Only):');
+            console.log(`   - Emails loaded: ${emails.length}`);
+            console.log(`   - Bit array size: ${bitsPerItem} bits (${Math.ceil(bitsPerItem / 8)} bytes)`);
+            console.log(`   - Hash functions: ${hashFunctions}`);
+            console.log(`   - Bits per email: ~${(bitsPerItem / this.itemCount).toFixed(1)} bits`);
             console.log(`   - Expected false positive rate: 1%`);
-            console.log(`   - Storage: ~${this.getStorageEstimate()} bytes (bit-array)`);
 
             return {
                 success: true,
-                itemsLoaded: emails.length + usernames.length,
+                itemsLoaded: emails.length,
                 storageBytes: this.getStorageEstimate()
             };
         } catch (error) {
@@ -71,74 +69,27 @@ class BloomFilterService {
         }
     }
 
-    /**
-     * Check if an email MIGHT exist in the system
-     * Uses hashing - does NOT store the actual email
-     * 
-     * @param {string} email 
-     * @returns {boolean} true = MAYBE exists (needs DB check), false = DEFINITELY doesn't exist
-     */
     mightExistEmail(email) {
         if (!this.initialized || !email) {
             return true; // Fallback to DB check if filter not ready
         }
 
-        // Hash the email and check bits
-        return this.filter.has(`email:${email.toLowerCase()}`);
+        // Hash the email → check if corresponding bits are set
+        return this.filter.has(email.toLowerCase());
     }
 
-    /**
-     * Check if a username MIGHT exist in the system
-     * Uses hashing - does NOT store the actual username
-     * 
-     * @param {string} username 
-     * @returns {boolean} true = MAYBE exists (needs DB check), false = DEFINITELY doesn't exist
-     */
-    mightExistUsername(username) {
-        if (!this.initialized || !username) {
-            return true; // Fallback to DB check if filter not ready
-        }
 
-        // Hash the username and check bits
-        return this.filter.has(`username:${username.toLowerCase()}`);
-    }
-
-    /**
-     * Add email to the filter (after successful registration)
-     * Hashes the email and sets specific bits
-     * 
-     * @param {string} email 
-     */
     addEmail(email) {
         if (this.initialized && email) {
-            this.filter.add(`email:${email.toLowerCase()}`);
+            // Hash email → set corresponding bits to 1
+            this.filter.add(email.toLowerCase());
         }
     }
 
-    /**
-     * Add username to the filter (after successful registration)
-     * Hashes the username and sets specific bits
-     * 
-     * @param {string} username 
-     */
-    addUsername(username) {
-        if (this.initialized && username) {
-            this.filter.add(`username:${username.toLowerCase()}`);
-        }
-    }
-
-    /**
-     * Get estimated storage size in bytes (for monitoring)
-     * 
-     * @returns {number} Approximate storage in bytes
-     */
     getStorageEstimate() {
         if (!this.filter) {
             return 0;
         }
-
-        // Bloom filter uses bit array
-        // With 1% error rate, it's approximately 9.6 bits per item
         const bitsPerItem = 9.6;
         const totalBits = this.itemCount * bitsPerItem;
         const bytes = Math.ceil(totalBits / 8);
@@ -146,23 +97,17 @@ class BloomFilterService {
         return bytes;
     }
 
-    /**
-     * Get filter statistics (for monitoring/debugging)
-     * 
-     * @returns {Object} Filter stats
-     */
     getStats() {
         return {
             initialized: this.initialized,
-            itemCount: this.itemCount,
+            emailCount: this.itemCount,
             storageBytes: this.getStorageEstimate(),
-            estimatedFalsePositiveRate: '1%'
+            bitsPerEmail: '~10 bits',
+            estimatedFalsePositiveRate: '1%',
+            note: 'Only bit positions stored, NOT actual email strings'
         };
     }
 
-    /**
-     * Reset the filter (useful for testing)
-     */
     reset() {
         this.filter = null;
         this.itemCount = 0;

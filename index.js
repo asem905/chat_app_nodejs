@@ -3,9 +3,8 @@ const port = process.env.PORT;
 const { sequelize } = require("./configs/db.config");
 const startIdempotencyCleanup = require("./utils/idempotency_clean_up");
 const { User, Room, UserRoom } = require("./models/relations/users_rooms_link");
-const Message = require("./models/chats/messages.model"); // FIX: Remove destructuring
+const Message = require("./models/chats/messages.model");
 
-// 2. Socket.IO Configuration
 const {
   io,
   server,
@@ -14,16 +13,12 @@ const {
 
 const messageController = require("./controller/chats/messages.controller");
 const socketService = require("./services/socket.service");
-
-// A. Inject the IO instance into the controller and socket service
 messageController.setIo(io);
 socketService.setIo(io);
 
-// B. Assign the persistence function to the Socket.IO 'sendMessage' event
-setSendMessageHandler(async (socket, messageData, callback) => { // FIX: Added callback parameter
+setSendMessageHandler(async (socket, messageData, callback) => {
   const { roomId, content, senderId } = messageData;
 
-  // Validation
   if (!roomId || !content || !senderId) {
     const errorResponse = {
       type: "validation",
@@ -32,7 +27,6 @@ setSendMessageHandler(async (socket, messageData, callback) => { // FIX: Added c
 
     socket.emit("error", errorResponse);
 
-    // FIX: Send error via callback too
     if (callback) {
       callback({ status: 'error', ...errorResponse });
     }
@@ -40,7 +34,6 @@ setSendMessageHandler(async (socket, messageData, callback) => { // FIX: Added c
   }
 
   try {
-    // FIX: Capture the returned message
     const message = await messageController.persistAndBroadcastMessage(
       senderId,
       roomId,
@@ -49,7 +42,6 @@ setSendMessageHandler(async (socket, messageData, callback) => { // FIX: Added c
 
     console.log(`[Socket Success] Message sent in room ${roomId}:`, message.id);
 
-    // FIX: Send success acknowledgment
     if (callback) {
       callback({
         status: 'success',
@@ -85,12 +77,11 @@ async function startServer() {
     await sequelize.sync({ alter: false });
     console.log("✅ Database synchronized.");
 
-    // Initialize Bloom Filter with existing users
     const userRepository = require("./repositories/user.repository");
     const bloomFilterService = require("./services/bloom_filter.service");
 
-    const { emails, usernames } = await userRepository.getAllEmailsAndUsernames();
-    await bloomFilterService.initialize(emails, usernames);
+    const emails = await userRepository.getAllEmails();
+    await bloomFilterService.initialize(emails);
 
     startIdempotencyCleanup();
     // Start the server

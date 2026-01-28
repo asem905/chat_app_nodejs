@@ -43,13 +43,8 @@ class MessageService {
 
 
     async createMessage(userId, roomId, content, parentMessageId = null) {
-        console.log("authorized")
         validateContent(content);
-
-
         await authorizationService.ensureUserInRoom(userId, roomId);
-
-
         if (parentMessageId) {
             const parentMessage = await messageRepository.findMessageByIdAndRoom(parentMessageId, roomId);
             if (!parentMessage) {

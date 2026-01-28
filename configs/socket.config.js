@@ -2,6 +2,10 @@ const http = require("http");
 const { Server } = require("socket.io");
 const app = require("../app");
 const jwt = require("jsonwebtoken");
+const socketService = require("../services/socket.service");
+const socketRoomAccess = require("../middlewares/socket_room_access");
+const { socketRateLimiter } = require("../middlewares/rate_limiter");
+const { sanitizeSocketData } = require("../middlewares/sanitization");
 require("dotenv").config();
 
 // 1. Create the HTTP server using your Express app
@@ -51,53 +55,207 @@ io.use((socket, next) => {
   }
 });
 io.on("connection", (socket) => {
-  console.log(`[Socket] Client connected: ${socket.id}`);
+  console.log(`[Socket] Client connected: ${socket.id} (User: ${socket.username}, ID: ${socket.userId})`);
 
-  // 1. JOIN A ROOM
-  socket.on("joinRoom", (roomId, callback) => {
-    socket.join(roomId);
-    console.log(`[Socket] ${socket.id} joined room: ${roomId}`);
+  // 1. JOIN A ROOM (with access control)
+  socket.on("joinRoom", async (roomId, callback) => {
+    try {
+      // Rate limit check
+      if (!socketRateLimiter.checkLimit(socket.id)) {
+        const error = {
+          status: "error",
+          type: "rate_limit_exceeded",
+          message: "Too many events. Please slow down."
+        };
+        socket.emit("error", error);
+        if (callback) callback(error);
+        return;
+      }
 
-    if (callback) {
-      callback({ status: "ok", message: `Joined room ${roomId}` });
+      // Validate room ID
+      const parsedRoomId = parseInt(roomId);
+      if (!parsedRoomId || parsedRoomId < 1) {
+        const error = { status: "error", type: "invalid_room", message: "Invalid room ID" };
+        socket.emit("error", error);
+        if (callback) callback(error);
+        return;
+      }
+
+      // Check room access
+      const accessCheck = await socketRoomAccess.canJoinRoom(socket.userId, parsedRoomId);
+
+      if (!accessCheck.allowed) {
+        console.warn(`[Socket] User ${socket.userId} denied access to room ${roomId}: ${accessCheck.message}`);
+        const error = {
+          status: "error",
+          type: accessCheck.errorType,
+          message: accessCheck.message
+        };
+        socket.emit("roomAccessDenied", error);
+        if (callback) callback(error);
+        return;
+      }
+
+      // Access granted - join the room
+      socket.join(roomId.toString());
+      console.log(`[Socket] ✅ User ${socket.username} (${socket.userId}) joined room: ${roomId}`);
+
+      if (callback) {
+        callback({
+          status: "ok",
+          message: `Joined room ${roomId}`,
+          room: accessCheck.room
+        });
+      }
+    } catch (error) {
+      console.error(`[Socket] Error in joinRoom:`, error);
+      const errorResponse = {
+        status: "error",
+        type: "server_error",
+        message: "Failed to join room"
+      };
+      socket.emit("error", errorResponse);
+      if (callback) callback(errorResponse);
     }
   });
 
-  // 2. LISTEN FOR NEW MESSAGES
-  socket.on("sendMessage", (data, callback) => {
-    // ✅ CHANGED: Add callback
-    sendMessageHandler(socket, data, callback); // ✅ CHANGED: Pass callback
+  // 2. LISTEN FOR NEW MESSAGES (with access control)
+  socket.on("sendMessage", async (data, callback) => {
+    try {
+      // Rate limit check
+      console.log(`[Socket] User ${socket.userId} (${socket.username}) sending message to room: ${data.roomId}`);
+      if (!socketRateLimiter.checkLimit(socket.id)) {
+        console.log(`[Socket] User ${socket.userId} (${socket.username}) rate limited for message send`);
+        const error = {
+          status: "error",
+          type: "rate_limit_exceeded",
+          message: "You're sending messages too quickly. Please slow down."
+        };
+        socket.emit("error", error);
+        if (callback) callback(error);
+        return;
+      }
+
+      // Sanitize input data
+      const sanitizedData = sanitizeSocketData(data);
+
+      // Verify room access before sending message
+      if (sanitizedData.roomId) {
+        const accessCheck = await socketRoomAccess.canSendMessage(socket.userId, sanitizedData.roomId);
+
+        if (!accessCheck.allowed) {
+          console.warn(`[Socket] User ${socket.userId} denied message send to room ${sanitizedData.roomId}: ${accessCheck.message}`);
+          const error = {
+            status: "error",
+            type: accessCheck.errorType,
+            message: accessCheck.message
+          };
+          socket.emit("error", error);
+          if (callback) callback(error);
+          return;
+        }
+      }
+
+      // Access granted - process message
+      sendMessageHandler(socket, sanitizedData, callback);
+    } catch (error) {
+      console.error(`[Socket] Error in sendMessage:`, error);
+      const errorResponse = {
+        status: "error",
+        type: "server_error",
+        message: "Failed to send message"
+      };
+      socket.emit("error", errorResponse);
+      if (callback) callback(errorResponse);
+    }
   });
 
-  // 3. DISCONNECT
+  // 3. DISCONNECT (cleanup rate limiter)
   socket.on("disconnect", () => {
-    console.log(`[Socket] Client disconnected: ${socket.id}`);
+    console.log(`[Socket] Client disconnected: ${socket.id} (User: ${socket.username})`);
+    // Clean up rate limiter tracking
+    socketRateLimiter.removeSocket(socket.id);
   });
 
-  // 4. Typing indicators
+  // 4. Typing indicators (with access control)
+  socket.on("typing", async (data, callback) => {
+    console.log(`[Socket] 📝 TYPING event received from ${socket.username}:`, data);
+    try {
+      const { roomId, username } = data || {};
 
-  socket.on("typing", ({ roomId, username }) => {
-    console.log(`👤 User ${username} is typing in room ${roomId}`);
+      if (!roomId) {
+        console.error(`[Socket] ❌ TYPING event missing roomId from user ${socket.userId}`);
+        return;
+      }
 
-    // Broadcast to all users in the room EXCEPT the sender
-    socket.to(roomId).emit("userTyping", {
-      roomId: parseInt(roomId),
-      userId: socket.userId, // Assuming you store userId in socket object
-      username: username,
-      isTyping: true,
-    });
+      // Rate limit check
+      if (!socketRateLimiter.checkLimit(socket.id)) {
+        console.log(`[Socket] User ${socket.userId} rate limited for typing event`);
+        return; // Silently ignore if rate limited
+      }
+
+      // Verify room membership
+      const hasAccess = await socketRoomAccess.verifyRoomMembership(socket.userId, parseInt(roomId));
+      if (!hasAccess) {
+        console.warn(`[Socket] User ${socket.userId} tried to send typing event to unauthorized room ${roomId}`);
+        return;
+      }
+
+      console.log(`👤 User ${username || socket.username} is typing in room ${roomId}`);
+
+      // Use SocketService for consistent broadcasting
+      socketService.broadcastTyping(roomId, {
+        roomId: parseInt(roomId),
+        userId: socket.userId,
+        username: username || socket.username,
+        isTyping: true,
+      }, socket.id);
+
+      if (callback) callback({ status: 'ok' });
+    } catch (error) {
+      console.error(`[Socket] Error in typing event:`, error);
+      if (callback) callback({ status: 'error', message: error.message });
+    }
   });
-  // 5. Handle stop typing event
-  socket.on("stopTyping", ({ roomId, username }) => {
-    console.log(`👤 User ${username} stopped typing in room ${roomId}`);
 
-    // Broadcast to all users in the room EXCEPT the sender
-    socket.to(roomId).emit("userStoppedTyping", {
-      roomId: parseInt(roomId),
-      userId: socket.userId,
-      username: username,
-      isTyping: false,
-    });
+  // 5. Handle stop typing event (with access control)
+  socket.on("stopTyping", async (data, callback) => {
+    console.log(`[Socket] ✋ STOP TYPING event received from ${socket.username}:`, data);
+    try {
+      const { roomId, username } = data || {};
+
+      if (!roomId) {
+        console.error(`[Socket] ❌ STOP TYPING event missing roomId from user ${socket.userId}`);
+        return;
+      }
+
+      // Rate limit check
+      if (!socketRateLimiter.checkLimit(socket.id)) {
+        return; // Silently ignore if rate limited
+      }
+
+      // Verify room membership
+      const hasAccess = await socketRoomAccess.verifyRoomMembership(socket.userId, parseInt(roomId));
+      if (!hasAccess) {
+        console.warn(`[Socket] User ${socket.userId} tried to send stopTyping event to unauthorized room ${roomId}`);
+        return;
+      }
+
+      console.log(`👤 User ${username || socket.username} stopped typing in room ${roomId}`);
+
+      // Use SocketService for consistent broadcasting
+      socketService.broadcastStopTyping(roomId, {
+        roomId: parseInt(roomId),
+        userId: socket.userId,
+        username: username || socket.username,
+        isTyping: false,
+      }, socket.id);
+
+      if (callback) callback({ status: 'ok' });
+    } catch (error) {
+      console.error(`[Socket] Error in stopTyping event:`, error);
+      if (callback) callback({ status: 'error', message: error.message });
+    }
   });
 });
 

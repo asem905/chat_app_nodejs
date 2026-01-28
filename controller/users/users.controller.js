@@ -60,14 +60,9 @@ const loginUser = asyncWrapper(async (req, res, next) => {
     email: req.body.email,
     password: req.body.password
   };
-
-  // Delegate to service layer
+  console.log("loginData", loginData);
   const user = await userService.loginUser(loginData);
-
-  // Get safe user data
   const safeUserData = userService.getSafeUserData(user);
-
-  // Return response
   return ResponseFormatter.success(
     res,
     httpStatusCodes.OK,

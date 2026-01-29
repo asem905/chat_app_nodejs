@@ -134,7 +134,6 @@ function detectSQLInjection(req, res, next) {
                 }
             }
         }
-        console.log("No violation found");
         return false; // No violation found
     };
 

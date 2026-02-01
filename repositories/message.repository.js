@@ -6,11 +6,9 @@ const {
 } = require("../models/relations/users_rooms_link");
 
 class MessageRepository {
-    async findMessagesByRoom(roomId, limit = 50, offset = 0) {
+    async findMessagesByRoom(roomId) {
         const messages = await Message.findAll({
             where: { room_id: roomId },
-            limit,
-            offset,
             order: [['created_at', 'ASC']],
         });
 
@@ -91,6 +89,38 @@ class MessageRepository {
 
         return room ? room.room_created_by : null;
     }
+
+    /**
+     * Bulk create multiple messages in a single transaction
+     * @param {Array} messagesArray - Array of message objects
+     * @returns {Array} Created messages
+     */
+    async bulkCreateMessages(messagesArray) {
+        const { sequelize } = require('../configs/db.config');
+        const transaction = await sequelize.transaction();
+
+        try {
+            // Bulk insert with transaction for atomicity
+            const createdMessages = await Message.bulkCreate(
+                messagesArray,
+                {
+                    transaction,
+                    returning: true,  // Return created records
+                    validate: true    // Run validations
+                }
+            );
+
+            await transaction.commit();
+            console.log(`[MessageRepository] ✅ Bulk created ${createdMessages.length} messages`);
+            return createdMessages;
+
+        } catch (error) {
+            await transaction.rollback();
+            console.error('[MessageRepository] ❌ Bulk create failed, transaction rolled back:', error.message);
+            throw error;
+        }
+    }
+
 }
 
 module.exports = new MessageRepository();

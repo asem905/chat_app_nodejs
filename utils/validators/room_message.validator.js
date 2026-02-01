@@ -79,8 +79,8 @@ const validateContent = (content, maxLength = 5000) => {
 
 
 const validatePaginationParams = (limit, offset) => {
-    const DEFAULT_LIMIT = 50;
-    const MAX_LIMIT = 100;
+    const DEFAULT_LIMIT = 200;
+    const MAX_LIMIT = 500;
 
     let validatedLimit = parseInt(limit) || DEFAULT_LIMIT;
     let validatedOffset = parseInt(offset) || 0;

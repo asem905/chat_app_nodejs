@@ -17,13 +17,9 @@ const setIo = (io) => {
 const getMessages = asyncWrapper(async (req, res, next) => {
     const roomId = req.params.roomId;
     const userId = req.currentUser.id;
-    const limit = req.query.limit;
-    const offset = req.query.offset;
-
     validateRoomId(roomId);
     validateUserId(userId);
-    const result = await messageService.getMessages(userId, roomId, limit, offset);
-    console.log("successfully fetched messages ",);
+    const result = await messageService.getMessages(userId, roomId);
     return ResponseFormatter.paginated(
         res,
         httpStatusCodes.OK,

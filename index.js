@@ -72,10 +72,10 @@ setSendMessageHandler(async (socket, messageData, callback) => {
 async function startServer() {
   try {
     await sequelize.authenticate();
-    console.log("✅ Database connection confirmed.");
+    console.log("Database connection confirmed.");
 
     await sequelize.sync({ alter: false });
-    console.log("✅ Database synchronized.");
+    console.log("Database synchronized.");
 
     const userRepository = require("./repositories/user.repository");
     const bloomFilterService = require("./services/bloom_filter.service");
@@ -83,14 +83,40 @@ async function startServer() {
     const emails = await userRepository.getAllEmails();
     await bloomFilterService.initialize(emails);
 
+    // Initialize RabbitMQ queue
+    const queueConfig = require("./configs/queue.config");
+    const MessageConsumer = require("./workers/message.consumer");
+
+    try {
+      await queueConfig.connect();
+      console.log("RabbitMQ connected successfully");
+
+      // Start message consumer worker
+      const messageConsumer = new MessageConsumer();
+      await messageConsumer.start();
+      console.log("Message consumer worker started");
+
+      // Graceful shutdown handling
+      process.on('SIGINT', async () => {
+        console.log('\n[Shutdown] Shutting down gracefully...');
+        await messageConsumer.stop();
+        await queueConfig.close();
+        process.exit(0);
+      });
+
+    } catch (queueError) {
+      console.warn("RabbitMQ connection failed:", queueError.message);
+      console.warn("Server will run with direct DB writes (no queue)");
+    }
+
     startIdempotencyCleanup();
     // Start the server
     server.listen(port, '0.0.0.0', () => {
-      console.log(`🚀 Server is running on http://localhost:${port}`);
-      console.log(`📡 Socket.IO listening on port ${port}`);
+      console.log(`Server is running on http://localhost:${port}`);
+      console.log(`Socket.IO listening on port ${port}`);
     });
   } catch (error) {
-    console.error("❌ Unable to connect to the database:", error);
+    console.error("Unable to connect to the database:", error);
     process.exit(1);
   }
 }

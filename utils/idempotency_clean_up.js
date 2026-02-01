@@ -4,18 +4,18 @@ const { Op } = require('sequelize');
 const Idempotency = require('../models/helpers/idempotency.model');
 
 const startIdempotencyCleanup = () => {
-  // Run every hour
-  cron.schedule('0 * * * *', async () => {
+  // Run every 1 minute
+  cron.schedule('* * * * *', async () => {
     try {
-      // Delete tokens older than 24 hours
+      // Delete tokens older than 1 minute
       const deleted = await Idempotency.destroy({
         where: {
           created_at: {
-            [Op.lt]: new Date(Date.now() - 24 * 60 * 60 * 1000)
+            [Op.lt]: new Date(Date.now() - 60 * 1000)
           }
         }
       });
-      
+
       if (deleted > 0) {
         console.log(`Cleaned up ${deleted} idempotency tokens`);
       }
@@ -23,8 +23,8 @@ const startIdempotencyCleanup = () => {
       console.error('Cleanup error:', error);
     }
   });
-  
-  console.log('Idempotency cleanup started (runs every hour)');
+
+  console.log('Idempotency cleanup started (runs every 1 minute)');
 };
 
 module.exports = startIdempotencyCleanup;

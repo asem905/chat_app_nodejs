@@ -316,7 +316,7 @@ Each message gets a unique ID (idempotency token). The server remembers tokens f
 
 1. **Clone the project**
 ```bash
-git clone <your-repo-url>
+git clone <my-repo-url>
 cd chat_app_nodejs
 ```
 
@@ -555,7 +555,7 @@ Making sure the same action can't happen twice by accident. Like putting a "do n
 
 - **API Documentation**: Visit `/api-docs` for interactive testing
 - **Issues**: Report bugs or request features on GitHub
-- **Questions**: Contact the development team
+- **Questions**: Contact me 
 
 ---
 
